@@ -102,13 +102,17 @@ jobs:
       - name: Récupérer le code source
         uses: actions/checkout@v4
 
+      - name: Configurer Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Construire l'image Docker
-        # On utilise docker build directement (plus simple que buildx pour un scan local)
-        run: docker build -t cicd-exercice:${{ github.sha }} app/
+        # --load : charge l'image dans le daemon local (nécessaire pour le scan Trivy)
+        run: docker build --load -t cicd-exercice:${{ github.sha }} app/
 
       - name: Scanner l'image Docker pour les vulnérabilités (Trivy)
-        uses: aquasecurity/trivy-action@0.20.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
+          scan-type: 'image'
           image-ref: cicd-exercice:${{ github.sha }}
           format: 'table'
           exit-code: '0'
