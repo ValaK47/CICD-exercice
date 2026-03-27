@@ -1,0 +1,1599 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Guide CI/CD avec GitHub Actions</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════ PAGE DE TITRE ═══════════════════════════════════════ -->
+<div class="cover-page">
+  <div class="badge">Exercice Pratique</div>
+  <h1>CI/CD avec<br>GitHub Actions</h1>
+  <p class="subtitle">Automatiser, tester et sécuriser le déploiement de son application</p>
+  <div class="cover-meta">
+    <div><div class="label">Niveau</div><div class="value">Débutant</div></div>
+    <div><div class="label">Plateforme</div><div class="value">GitHub</div></div>
+    <div><div class="label">Technologie</div><div class="value">Node.js</div></div>
+    <div><div class="label">Durée</div><div class="value">3–4 heures</div></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ SOMMAIRE ═══════════════════════════════════════ -->
+<div class="toc">
+  <h2>📋 Sommaire</h2>
+  <ol>
+    <li><a href="#s1"><span class="section-num">1.</span> C'est quoi le CI/CD ? (les concepts de base)</a></li>
+    <li><a href="#s2"><span class="section-num">2.</span> C'est quoi un pipeline ? (explication détaillée)</a></li>
+    <li><a href="#s3"><span class="section-num">3.</span> Présentation du projet fil rouge</a></li>
+    <li><a href="#s4"><span class="section-num">4.</span> Étape 1 — Créer le dépôt GitHub</a></li>
+    <li><a href="#s5"><span class="section-num">5.</span> Étape 2 — Découvrir l'application</a></li>
+    <li><a href="#s6"><span class="section-num">6.</span> Étape 3 — Comprendre la structure d'un pipeline GitHub Actions</a></li>
+    <li><a href="#s7"><span class="section-num">7.</span> Étape 4 — Observer le premier pipeline CI</a></li>
+    <li><a href="#s8"><span class="section-num">8.</span> Étape 5 — Provoquer un échec (et comprendre pourquoi c'est utile)</a></li>
+    <li><a href="#s9"><span class="section-num">9.</span> Étape 6 — Sécurité : les secrets GitHub</a></li>
+    <li><a href="#s10"><span class="section-num">10.</span> Étape 7 — Protection des branches</a></li>
+    <li><a href="#s11"><span class="section-num">11.</span> Étape 8 — Le pipeline CD et les environnements</a></li>
+    <li><a href="#s12"><span class="section-num">12.</span> Étape 9 — Sécurité des images Docker avec Trivy</a></li>
+    <li><a href="#s12b"><span class="section-num">13.</span> Étape 10 — Analyse du code source avec CodeQL (SAST)</a></li>
+    <li><a href="#s13"><span class="section-num">14.</span> Étape 11 — Scénario complet : la Pull Request</a></li>
+    <li><a href="#s14"><span class="section-num">15.</span> Récapitulatif : les 7 règles d'or de la sécurité CI/CD</a></li>
+    <li><a href="#s15"><span class="section-num">16.</span> Exercices bonus</a></li>
+  </ol>
+</div>
+
+<!-- ═══════════════════════════════════════ SECTION 1 ═══════════════════════════════════════ -->
+<h1 id="s1">1. C'est quoi le CI/CD ?</h1>
+
+<p>Avant de commencer à manipuler des outils, il faut bien comprendre le problème que CI/CD résout. Prenons un exemple concret.</p>
+
+<h2>Le problème sans CI/CD</h2>
+
+<p>Imaginez une équipe de 4 développeurs sur le même projet. Chacun travaille dans son coin pendant 2 semaines, puis le vendredi après-midi, tout le monde fusionne son code.</p>
+
+<div class="alert alert-danger">
+  <div class="alert-icon">💥</div>
+  <div class="alert-content">
+    <div class="alert-title">Ce qui se passe en réalité</div>
+    Les codes ne fonctionnent plus ensemble. Des tests cassent. Des fonctionnalités se régressent mutuellement.
+    Le vendredi soir vire au désastre. On appelle ça <strong>l'enfer de la fusion</strong> (merge hell).
+  </div>
+</div>
+
+<h2>La solution : l'Intégration Continue (CI)</h2>
+
+<p>L'<strong>Intégration Continue</strong> (Continuous Integration) consiste à vérifier automatiquement chaque modification de code dès qu'elle est envoyée.</p>
+
+<p>Concrètement : à chaque <code>git push</code>, une machine virtuelle se lance et exécute une série de contrôles :</p>
+
+<ul>
+  <li>Est-ce que le code est bien écrit (respect des conventions) ?</li>
+  <li>Est-ce que les tests passent ?</li>
+  <li>Est-ce qu'on n'a pas introduit de faille de sécurité ?</li>
+</ul>
+
+<p>Si un contrôle échoue, le développeur est notifié immédiatement, sur sa propre modification. Plus de surprise le vendredi.</p>
+
+<h2>Le Déploiement Continu (CD)</h2>
+
+<p>Le <strong>Déploiement Continu</strong> (Continuous Delivery) va plus loin : une fois que tous les contrôles sont passés, le code est automatiquement livré vers un environnement (staging, production).</p>
+
+<div class="diagram">
+Développeur fait un git push
+         │
+         ▼
+  ┌─────────────────────────────────┐
+  │        Pipeline CI              │
+  │  1. Analyse du code (lint)      │
+  │  2. Tests unitaires             │
+  │  3. Audit de sécurité           │
+  │  4. Construction image Docker   │
+  └─────────────────────────────────┘
+         │  (si tout est OK ✅)
+         ▼
+  ┌─────────────────────────────────┐
+  │        Pipeline CD              │
+  │  1. Publication de l'image      │
+  │  2. Déploiement en staging      │
+  │  3. Approbation manuelle        │
+  │  4. Déploiement en production   │
+  └─────────────────────────────────┘
+         │
+         ▼
+  Application en ligne !
+</div>
+
+<div class="alert alert-info">
+  <div class="alert-icon">💡</div>
+  <div class="alert-content">
+    <div class="alert-title">Résumé simple</div>
+    <strong>CI</strong> = filet de sécurité qui attrape les erreurs avant qu'elles n'arrivent en production.<br>
+    <strong>CD</strong> = automatisation de la livraison une fois les contrôles passés.
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ SECTION 2 ═══════════════════════════════════════ -->
+<h1 id="s2">2. C'est quoi un pipeline ?</h1>
+
+<p>Un <strong>pipeline</strong> est une chaîne d'étapes automatisées qui s'exécutent dans un ordre précis, comme une chaîne de montage dans une usine.</p>
+
+<h2>L'analogie de la chaîne de montage</h2>
+
+<p>Dans une usine automobile :</p>
+<ol>
+  <li>On assemble le châssis</li>
+  <li>On installe le moteur</li>
+  <li>On peint la carrosserie</li>
+  <li>On contrôle la qualité</li>
+  <li>On livre la voiture</li>
+</ol>
+
+<p>Si l'étape 2 échoue (moteur défectueux), on s'arrête là. On ne peint pas une voiture sans moteur.</p>
+
+<p>Un pipeline CI/CD fonctionne exactement pareil :</p>
+
+<div class="diagram">
+┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
+│  ÉTAPE 1 │───▶│  ÉTAPE 2 │───▶│  ÉTAPE 3 │───▶│  ÉTAPE 4 │
+│   Lint   │    │  Tests   │    │  Sécu    │    │  Build   │
+└──────────┘    └──────────┘    └──────────┘    └──────────┘
+     ✅               ✅               ✅               ✅
+                                                       │
+                                                       ▼
+                                                  DÉPLOIEMENT
+</div>
+
+<div class="diagram">
+┌──────────┐    ┌──────────┐
+│  ÉTAPE 1 │───▶│  ÉTAPE 2 │ ← ÉCHEC ici
+│   Lint   │    │  Tests   │
+└──────────┘    └──────────┘
+     ✅               ❌
+                      │
+                      └──▶ STOP. Les étapes suivantes ne s'exécutent pas.
+                           Le développeur est notifié.
+</div>
+
+<h2>Les composants d'un pipeline GitHub Actions</h2>
+
+<p>Dans GitHub Actions, un pipeline s'appelle un <strong>workflow</strong>. Il est défini dans un fichier <code>.yml</code> dans le dossier <code>.github/workflows/</code>.</p>
+
+<table>
+  <tr>
+    <th>Terme</th>
+    <th>Définition</th>
+    <th>Exemple</th>
+  </tr>
+  <tr>
+    <td><strong>Workflow</strong></td>
+    <td>Le pipeline complet (fichier .yml)</td>
+    <td><code>ci.yml</code></td>
+  </tr>
+  <tr>
+    <td><strong>Trigger (déclencheur)</strong></td>
+    <td>L'événement qui lance le workflow</td>
+    <td><code>git push</code>, <code>pull request</code></td>
+  </tr>
+  <tr>
+    <td><strong>Job</strong></td>
+    <td>Groupe d'étapes exécutées sur une même machine virtuelle</td>
+    <td><code>lint</code>, <code>test</code>, <code>build</code></td>
+  </tr>
+  <tr>
+    <td><strong>Step (étape)</strong></td>
+    <td>Une commande ou une action dans un job</td>
+    <td><code>npm install</code>, <code>npm test</code></td>
+  </tr>
+  <tr>
+    <td><strong>Action</strong></td>
+    <td>Bloc de code réutilisable (comme un plugin)</td>
+    <td><code>actions/checkout@v4</code></td>
+  </tr>
+  <tr>
+    <td><strong>Runner</strong></td>
+    <td>La machine virtuelle qui exécute le job</td>
+    <td><code>ubuntu-latest</code></td>
+  </tr>
+</table>
+
+<h2>Structure visuelle d'un fichier workflow</h2>
+
+<pre>
+<span class="keyword">name:</span> <span class="string">CI - Intégration Continue</span>    <span class="comment"># Nom affiché dans l'onglet Actions</span>
+
+<span class="keyword">on:</span>                                  <span class="comment"># Déclencheurs</span>
+  push:
+    branches: [ "**" ]               <span class="comment"># Sur TOUT push sur TOUTE branche</span>
+  pull_request:
+    branches: [ main ]               <span class="comment"># Sur toute PR vers main</span>
+
+<span class="keyword">jobs:</span>
+  lint:                              <span class="comment"># Nom du 1er job</span>
+    <span class="keyword">runs-on:</span> ubuntu-latest           <span class="comment"># Machine virtuelle Ubuntu</span>
+    <span class="keyword">steps:</span>
+      - <span class="keyword">name:</span> Récupérer le code
+        <span class="keyword">uses:</span> actions/checkout@v4      <span class="comment"># Action GitHub (plugin)</span>
+
+      - <span class="keyword">name:</span> Installer Node.js
+        <span class="keyword">uses:</span> actions/setup-node@v4
+        <span class="keyword">with:</span>
+          node-version: <span class="string">'20'</span>
+
+      - <span class="keyword">name:</span> Lancer le lint
+        <span class="keyword">run:</span> npm run lint               <span class="comment"># Commande shell classique</span>
+        <span class="keyword">working-directory:</span> app
+</pre>
+
+<div class="alert alert-info">
+  <div class="alert-icon">💡</div>
+  <div class="alert-content">
+    <div class="alert-title">Ce qui se passe concrètement</div>
+    Chaque fois que vous faites un <code>git push</code>, GitHub loue une machine virtuelle Ubuntu quelque part dans le cloud,
+    exécute votre pipeline (ça prend 1 à 5 minutes selon la complexité), puis vous affiche un ✅ ou ❌.
+    La machine est ensuite détruite. Vous ne payez rien (quota gratuit généreux sur les repos publics).
+  </div>
+</div>
+
+<h2>Jobs en parallèle vs en série</h2>
+
+<p>Les jobs peuvent s'exécuter en parallèle (en même temps) ou en série (l'un après l'autre).</p>
+
+<p>Dans notre pipeline CI, on a configuré ceci :</p>
+
+<div class="diagram">
+  lint ──────────────────────────────────────────────────▶ ✅
+    │                                                        │
+    ├──▶ test (attend lint) ──────────────────────────▶ ✅  │
+    │                                                        │
+    └──▶ security-audit (attend lint) ──────────────▶ ✅    │
+                                                       │     │
+                                                       └──▶ build-docker
+                                                            (attend test ET security-audit)
+</div>
+
+<p>Cela signifie que <code>test</code> et <code>security-audit</code> tournent en même temps (gain de temps), mais <code>build-docker</code> n'attend que si les deux ont réussi.</p>
+
+<!-- ═══════════════════════════════════════ SECTION 3 ═══════════════════════════════════════ -->
+<h1 id="s3">3. Présentation du projet fil rouge</h1>
+
+<p>Pour cet exercice, vous allez travailler sur une <strong>API REST</strong> très simple : une calculatrice.</p>
+
+<h2>Pourquoi une calculatrice ?</h2>
+
+<p>L'application est volontairement simple pour que vous puissiez vous concentrer sur le CI/CD, pas sur le code métier. Mais les principes que vous apprendrez s'appliquent exactement de la même façon sur une vraie application en production.</p>
+
+<h2>Ce que fait l'application</h2>
+
+<table>
+  <tr>
+    <th>Méthode HTTP</th>
+    <th>Route</th>
+    <th>Ce qu'elle fait</th>
+    <th>Exemple</th>
+  </tr>
+  <tr>
+    <td>GET</td>
+    <td><code>/</code></td>
+    <td>Message de bienvenue</td>
+    <td><code>{"message": "Bienvenue !"}</code></td>
+  </tr>
+  <tr>
+    <td>GET</td>
+    <td><code>/health</code></td>
+    <td>État de l'app (utilisé par les pipelines)</td>
+    <td><code>{"status": "ok"}</code></td>
+  </tr>
+  <tr>
+    <td>POST</td>
+    <td><code>/add</code></td>
+    <td>Addition</td>
+    <td><code>{"a":3,"b":5}</code> → <code>{"result":8}</code></td>
+  </tr>
+  <tr>
+    <td>POST</td>
+    <td><code>/multiply</code></td>
+    <td>Multiplication</td>
+    <td><code>{"a":4,"b":6}</code> → <code>{"result":24}</code></td>
+  </tr>
+</table>
+
+<h2>Structure des fichiers</h2>
+
+<pre>
+cicdexo/
+├── app/
+│   ├── src/
+│   │   ├── app.js          <span class="comment">← L'API Express (les routes)</span>
+│   │   └── server.js       <span class="comment">← Démarre le serveur sur le port 3000</span>
+│   ├── tests/
+│   │   └── app.test.js     <span class="comment">← Tests qui vérifient que l'API fonctionne</span>
+│   ├── Dockerfile          <span class="comment">← Recette pour créer l'image Docker</span>
+│   ├── .eslintrc.json      <span class="comment">← Règles de style du code</span>
+│   └── package.json        <span class="comment">← Dépendances et scripts</span>
+│
+├── .github/
+│   └── workflows/
+│       ├── ci.yml          <span class="comment">← Pipeline CI (lint, tests, sécu, docker)</span>
+│       ├── cd.yml          <span class="comment">← Pipeline CD (publish, staging, prod)</span>
+│       └── security-scan.yml <span class="comment">← Analyse sécurité hebdomadaire</span>
+│
+└── docs/
+    └── guide_cicd.html     <span class="comment">← Ce guide !</span>
+</pre>
+
+<h2>Technologies utilisées</h2>
+
+<table>
+  <tr>
+    <th>Outil</th>
+    <th>Rôle</th>
+    <th>Étape du pipeline</th>
+  </tr>
+  <tr>
+    <td><strong>ESLint</strong></td>
+    <td>Analyse statique du code (conventions)</td>
+    <td>Lint</td>
+  </tr>
+  <tr>
+    <td><strong>Jest + Supertest</strong></td>
+    <td>Tests automatisés de l'API</td>
+    <td>Test</td>
+  </tr>
+  <tr>
+    <td><strong>npm audit</strong></td>
+    <td>Détecte les dépendances vulnérables</td>
+    <td>Security audit</td>
+  </tr>
+  <tr>
+    <td><strong>Docker</strong></td>
+    <td>Empaquette l'application</td>
+    <td>Build</td>
+  </tr>
+  <tr>
+    <td><strong>Trivy</strong></td>
+    <td>Scanner de vulnérabilités de l'image Docker</td>
+    <td>Build</td>
+  </tr>
+  <tr>
+    <td><strong>CodeQL</strong></td>
+    <td>Analyse de sécurité du code source (SAST)</td>
+    <td>Security scan</td>
+  </tr>
+  <tr>
+    <td><strong>GHCR</strong></td>
+    <td>GitHub Container Registry (stockage images Docker)</td>
+    <td>Publish</td>
+  </tr>
+</table>
+
+<!-- ═══════════════════════════════════════ ÉTAPES ═══════════════════════════════════════ -->
+<h1 id="s4">4. Étape 1 — Créer le dépôt GitHub</h1>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">1</div>
+    <div class="step-title">Créer un nouveau dépôt sur GitHub</div>
+  </div>
+  <ol>
+    <li>Rendez-vous sur <strong>github.com</strong> et connectez-vous avec votre compte</li>
+    <li>Cliquez sur le bouton vert <strong>"New"</strong> en haut à gauche (ou le <strong>+</strong> en haut à droite → "New repository")</li>
+    <li>Remplissez le formulaire :
+      <ul>
+        <li><strong>Repository name</strong> : <code>cicd-exercice</code></li>
+        <li><strong>Description</strong> : <code>Exercice CI/CD avec GitHub Actions</code></li>
+        <li><strong>Visibility</strong> : <code>Public</code> (pour accéder à toutes les fonctionnalités gratuitement)</li>
+        <li><strong>Ne cochez PAS</strong> "Add a README file" — nous allons pousser notre propre code</li>
+      </ul>
+    </li>
+    <li>Cliquez <strong>"Create repository"</strong></li>
+  </ol>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">2</div>
+    <div class="step-title">Pousser le code sur GitHub</div>
+  </div>
+  <p>Ouvrez un terminal dans le dossier <code>cicdexo</code> et exécutez ces commandes <strong>une par une</strong> :</p>
+
+<pre>
+<span class="comment"># 1. Initialiser git dans ce dossier</span>
+git init
+
+<span class="comment"># 2. Dire à git de surveiller tous les fichiers</span>
+git add .
+
+<span class="comment"># 3. Créer le premier commit (comme une sauvegarde nommée)</span>
+git commit -m "feat: ajout application et pipelines CI/CD"
+
+<span class="comment"># 4. Connecter ce dépôt local à GitHub</span>
+<span class="comment"># IMPORTANT : remplacez youssef-esgi par VOTRE nom d'utilisateur GitHub</span>
+git remote add origin https://github.com/youssef-esgi/cicd-exercice.git
+
+<span class="comment"># 5. Renommer la branche principale en "main"</span>
+git branch -M main
+
+<span class="comment"># 6. Envoyer le code sur GitHub</span>
+git push -u origin main
+</pre>
+
+  <div class="alert alert-info">
+    <div class="alert-icon">💡</div>
+    <div class="alert-content">
+      GitHub peut vous demander vos identifiants. Si vous avez activé la double authentification,
+      vous devrez créer un "Personal Access Token" (Settings → Developer settings → Personal access tokens).
+    </div>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">3</div>
+    <div class="step-title">Vérifier que GitHub Actions est activé</div>
+  </div>
+  <ol>
+    <li>Sur votre dépôt GitHub, cliquez sur l'onglet <strong>"Actions"</strong></li>
+    <li>Si GitHub vous demande d'activer les Actions, cliquez <strong>"I understand my workflows, go ahead and enable them"</strong></li>
+    <li>Vous devriez voir un workflow "CI - Intégration Continue" déjà en cours d'exécution (cercle orange) !</li>
+  </ol>
+  <div class="alert alert-success">
+    <div class="alert-icon">✅</div>
+    <div class="alert-content">Le simple fait de pousser le dossier <code>.github/workflows/</code> a automatiquement déclenché le pipeline CI. Pas besoin de cliquer sur "Run".</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ ÉTAPE 2 ═══════════════════════════════════════ -->
+<h1 id="s5">5. Étape 2 — Découvrir l'application</h1>
+
+<p>Avant d'analyser les pipelines, comprenons ce que fait l'application que nous allons déployer.</p>
+
+<h2>L'API (app/src/app.js)</h2>
+
+<p>L'application utilise <strong>Express</strong>, un framework web pour Node.js. Voici le code simplifié commenté :</p>
+
+<pre>
+const express = require('express');
+const app = express();
+app.use(express.json()); <span class="comment">// Permet de lire le JSON des requêtes</span>
+
+<span class="comment">// Route GET / → retourne un message de bienvenue</span>
+app.get('/', (req, res) => {
+  res.json({ message: 'Bienvenue sur notre API !', version: '1.0.0' });
+});
+
+<span class="comment">// Route POST /add → addition de deux nombres</span>
+app.post('/add', (req, res) => {
+  const { a, b } = req.body; <span class="comment">// On lit a et b dans le corps de la requête</span>
+
+  <span class="comment">// Validation : on vérifie que a et b sont bien des nombres</span>
+  if (typeof a !== 'number' || typeof b !== 'number') {
+    return res.status(400).json({ error: 'a et b doivent être des nombres' });
+  }
+
+  res.json({ result: a + b }); <span class="comment">// On retourne le résultat</span>
+});
+</pre>
+
+<h2>Les tests (app/tests/app.test.js)</h2>
+
+<p>Pour chaque route, on a des tests automatisés qui vérifient que tout fonctionne :</p>
+
+<pre>
+<span class="comment">// Ce test vérifie que POST /add retourne bien 8 quand a=3 et b=5</span>
+test('additionne deux nombres', async () => {
+  const res = await request(app).post('/add').send({ a: 3, b: 5 });
+  expect(res.statusCode).toBe(200);  <span class="comment">// Code HTTP 200 = succès</span>
+  expect(res.body.result).toBe(8);   <span class="comment">// Le résultat doit être 8</span>
+});
+
+<span class="comment">// Ce test vérifie que l'API gère bien les erreurs</span>
+test('retourne une erreur si les paramètres sont invalides', async () => {
+  const res = await request(app).post('/add').send({ a: 'foo', b: 5 });
+  expect(res.statusCode).toBe(400);        <span class="comment">// Code 400 = mauvaise requête</span>
+  expect(res.body.error).toBeDefined();    <span class="comment">// Un message d'erreur doit être présent</span>
+});
+</pre>
+
+<h2>Le Dockerfile</h2>
+
+<p>Le Dockerfile est la recette pour créer une image Docker de l'application. Voici les bonnes pratiques de sécurité appliquées :</p>
+
+<pre>
+<span class="comment"># Image Alpine = image très légère (moins de logiciels = moins de failles)</span>
+FROM node:20-alpine
+
+<span class="comment"># SÉCURITÉ : créer un utilisateur non-root</span>
+<span class="comment"># Si l'application est piratée, l'attaquant n'aura pas les droits root</span>
+RUN addgroup -S appgroup &amp;&amp; adduser -S appuser -G appgroup
+
+WORKDIR /app
+
+<span class="comment"># OPTIMISATION : copier package.json en premier</span>
+<span class="comment"># Si le code change mais pas les dépendances, Docker réutilise le cache</span>
+COPY package*.json ./
+RUN npm ci --only=production  <span class="comment"># Production seulement (pas les outils de dev)</span>
+
+COPY src/ ./src/
+
+<span class="comment"># SÉCURITÉ : basculer sur l'utilisateur non-root avant de lancer l'app</span>
+USER appuser
+
+EXPOSE 3000
+CMD ["node", "src/server.js"]
+</pre>
+
+<div class="alert alert-warning">
+  <div class="alert-icon">⚠️</div>
+  <div class="alert-content">
+    <div class="alert-title">Pourquoi ne pas tourner en root dans un container ?</div>
+    Si votre application a une vulnérabilité et qu'un attaquant prend le contrôle du processus,
+    un utilisateur root dans le container peut modifier le système de fichiers, installer des outils malveillants,
+    ou tenter de s'échapper du container. Un utilisateur non-root limite les dégâts.
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ ÉTAPE 3 ═══════════════════════════════════════ -->
+<h1 id="s6">6. Étape 3 — Comprendre la structure d'un pipeline GitHub Actions</h1>
+
+<p>Ouvrez le fichier <code>.github/workflows/ci.yml</code> et observons-le ensemble.</p>
+
+<h2>Le déclencheur</h2>
+
+<pre>
+on:
+  push:
+    branches: [ "**" ]       <span class="comment"># ** = toutes les branches</span>
+  pull_request:
+    branches: [ main ]       <span class="comment"># Les PR ciblant main</span>
+</pre>
+
+<p>Cela signifie : "Lance ce pipeline à chaque push sur n'importe quelle branche, et à chaque Pull Request vers main".</p>
+
+<h2>Les 4 jobs du pipeline CI</h2>
+
+<pre>
+jobs:
+  lint:                        <span class="comment"># Job 1 : analyse du code</span>
+    runs-on: ubuntu-latest
+    steps: [...]
+
+  test:
+    needs: lint                <span class="comment"># Job 2 : attend que lint soit OK</span>
+    runs-on: ubuntu-latest
+    steps: [...]
+
+  security-audit:
+    needs: lint                <span class="comment"># Job 3 : tourne en parallèle avec "test"</span>
+    runs-on: ubuntu-latest
+    steps: [...]
+
+  build-docker:
+    needs: [test, security-audit]  <span class="comment"># Job 4 : attend les 2 jobs précédents</span>
+    runs-on: ubuntu-latest
+    steps: [...]
+</pre>
+
+<h2>Le mot-clé <code>needs</code></h2>
+
+<div class="alert alert-info">
+  <div class="alert-icon">💡</div>
+  <div class="alert-content">
+    <div class="alert-title">needs = dépendance entre jobs</div>
+    <code>needs: lint</code> signifie "n'exécute ce job que si le job <code>lint</code> a réussi".<br>
+    <code>needs: [test, security-audit]</code> signifie "n'exécute ce job que si les deux ont réussi".
+  </div>
+</div>
+
+<h2>Le job de lint détaillé</h2>
+
+<pre>
+lint:
+  name: Analyse du code (ESLint)
+  runs-on: ubuntu-latest
+
+  steps:
+    <span class="comment"># Action qui télécharge votre code sur la machine virtuelle</span>
+    - name: Récupérer le code source
+      uses: actions/checkout@v4
+
+    <span class="comment"># Action qui installe Node.js (avec cache pour aller plus vite)</span>
+    - name: Installer Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: app/package-lock.json
+
+    <span class="comment"># Commande shell classique</span>
+    - name: Installer les dépendances
+      run: npm ci
+      working-directory: app    <span class="comment"># Exécuté dans le dossier app/</span>
+
+    - name: Lancer ESLint
+      run: npm run lint
+      working-directory: app
+</pre>
+
+<h2>Que fait ESLint ?</h2>
+
+<p>ESLint analyse le code <strong>sans l'exécuter</strong> pour vérifier qu'il respecte les règles définies dans <code>.eslintrc.json</code>.</p>
+
+<pre>
+{
+  "rules": {
+    "no-unused-vars": "error",    <span class="comment">// Variable déclarée mais jamais utilisée → ERREUR</span>
+    "eqeqeq": "error",            <span class="comment">// Utiliser === au lieu de == → ERREUR</span>
+    "semi": ["error", "always"],  <span class="comment">// Oubli du ; → ERREUR</span>
+    "no-console": "warn"          <span class="comment">// console.log() → AVERTISSEMENT</span>
+  }
+}
+</pre>
+
+<!-- ═══════════════════════════════════════ ÉTAPE 4 ═══════════════════════════════════════ -->
+<h1 id="s7">7. Étape 4 — Observer le premier pipeline CI</h1>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">1</div>
+    <div class="step-title">Ouvrir l'onglet Actions</div>
+  </div>
+  <ol>
+    <li>Sur votre dépôt GitHub → cliquez sur l'onglet <strong>"Actions"</strong></li>
+    <li>Vous voyez le workflow "CI - Intégration Continue" avec un cercle orange (en cours) ou vert (terminé)</li>
+    <li>Cliquez dessus pour voir le détail</li>
+  </ol>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">2</div>
+    <div class="step-title">Lire les logs de chaque job</div>
+  </div>
+  <p>Cliquez sur chaque job pour voir les logs détaillés. Voici ce que vous devriez voir :</p>
+
+  <p><strong>Job "lint" :</strong></p>
+  <pre>
+Run npm run lint
+  app/src/app.js
+    ✓ 0 problems (0 errors, 0 warnings)
+  ✓ 1 file linted, no issues found.
+</pre>
+
+  <p><strong>Job "test" :</strong></p>
+  <pre>
+PASS tests/app.test.js
+  GET /
+    ✓ retourne un message de bienvenue (23ms)
+  GET /health
+    ✓ retourne le statut ok (5ms)
+  POST /add
+    ✓ additionne deux nombres (8ms)
+    ✓ retourne une erreur si les paramètres ne sont pas des nombres (4ms)
+  POST /multiply
+    ✓ multiplie deux nombres (3ms)
+    ✓ retourne une erreur si les paramètres ne sont pas des nombres (3ms)
+
+Tests:  6 passed, 6 total
+Coverage: Lines 92%, Functions 100%, Branches 83%
+</pre>
+
+  <p><strong>Job "security-audit" :</strong></p>
+  <pre>
+Run npm audit --audit-level=high
+found 0 vulnerabilities
+</pre>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">3</div>
+    <div class="step-title">Télécharger le rapport de couverture</div>
+  </div>
+  <p>En bas de la page du workflow, dans la section <strong>"Artifacts"</strong>, vous trouverez un fichier <strong>"coverage-report"</strong>. Téléchargez-le.</p>
+  <p>Ouvrez <code>index.html</code> dans votre navigateur. Vous verrez ligne par ligne quelles parties du code sont couvertes par les tests (en vert) et lesquelles ne le sont pas (en rouge).</p>
+</div>
+
+<!-- ═══════════════════════════════════════ ÉTAPE 5 ═══════════════════════════════════════ -->
+<h1 id="s8">8. Étape 5 — Provoquer un échec (et comprendre pourquoi c'est utile)</h1>
+
+<div class="alert alert-info">
+  <div class="alert-icon">🎯</div>
+  <div class="alert-content">
+    <div class="alert-title">Objectif pédagogique</div>
+    On va volontairement "casser" quelque chose pour voir comment le pipeline réagit et nous protège.
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">1</div>
+    <div class="step-title">Créer une nouvelle branche</div>
+  </div>
+  <p>On ne travaille jamais directement sur <code>main</code>. On crée une branche pour chaque modification :</p>
+  <pre>git checkout -b feature/test-echec</pre>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">2</div>
+    <div class="step-title">Introduire une erreur de lint dans app.js</div>
+  </div>
+  <p>Ouvrez <code>app/src/app.js</code> et ajoutez cette ligne juste après <code>const app = express();</code> :</p>
+  <pre>
+var maVariable = "test"  // var est interdit + manque le ; + guillemets doubles
+</pre>
+  <p>Cette ligne viole 3 règles ESLint.</p>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">3</div>
+    <div class="step-title">Pousser et observer l'échec</div>
+  </div>
+  <pre>
+git add app/src/app.js
+git commit -m "test: introduction d'une erreur volontaire"
+git push origin feature/test-echec
+</pre>
+  <p>Dans l'onglet Actions, vous verrez le job "lint" échouer avec une croix rouge ❌. Les logs indiquent précisément le problème :</p>
+  <pre>
+app/src/app.js
+  2:5  error  Unexpected var, use let or const instead  no-var
+  2:20 error  Strings must use singlequote              quotes
+  2:26 error  Missing semicolon                         semi
+✖ 3 problems (3 errors, 0 warnings)
+npm ERR! Process exited with code 1
+</pre>
+  <p><strong>Conséquence :</strong> les jobs "test" et "build-docker" ne s'exécutent même pas. Le pipeline s'arrête dès la première étape qui échoue.</p>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">4</div>
+    <div class="step-title">Corriger et revenir au vert</div>
+  </div>
+  <p>Supprimez la ligne ajoutée, puis :</p>
+  <pre>
+git add app/src/app.js
+git commit -m "fix: suppression de l'erreur de lint"
+git push origin feature/test-echec
+</pre>
+  <p>Observez le pipeline repasser au vert ✅.</p>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">5</div>
+    <div class="step-title">BONUS : casser un test unitaire</div>
+  </div>
+  <p>Dans <code>app/src/app.js</code>, modifiez la route <code>/add</code> pour retourner <code>a - b</code> au lieu de <code>a + b</code>. Poussez et observez le job "test" échouer.</p>
+  <pre>
+FAIL tests/app.test.js
+  ✕ additionne deux nombres
+    Expected: 8
+    Received: -2
+</pre>
+  <p>Le pipeline vous a <strong>empêché de déployer un bug en production</strong>.</p>
+</div>
+
+<!-- ═══════════════════════════════════════ ÉTAPE 6 ═══════════════════════════════════════ -->
+<h1 id="s9">9. Étape 6 — Sécurité : les secrets GitHub</h1>
+
+<div class="alert alert-danger">
+  <div class="alert-icon">🚨</div>
+  <div class="alert-content">
+    <div class="alert-title">Règle absolue : Ne jamais stocker de secrets dans le code</div>
+    Un mot de passe, une clé API, un token dans le code source c'est une faille de sécurité critique.
+    L'historique Git conserve TOUT. Même si vous supprimez le fichier, le secret reste accessible via <code>git log</code>.
+  </div>
+</div>
+
+<h2>Des incidents réels</h2>
+
+<table>
+  <tr>
+    <th>Incident</th>
+    <th>Conséquence</th>
+  </tr>
+  <tr>
+    <td>Clé AWS commités sur GitHub</td>
+    <td>Des robots scannent GitHub en permanence. Des cryptomineurs ont utilisé le compte en quelques minutes → facture de 50 000$</td>
+  </tr>
+  <tr>
+    <td>Token de base de données exposé</td>
+    <td>Fuite de données clients</td>
+  </tr>
+  <tr>
+    <td>Clé API d'un service de paiement</td>
+    <td>Fraudes sur le compte</td>
+  </tr>
+</table>
+
+<h2>La solution : GitHub Secrets</h2>
+
+<p>GitHub Secrets est un coffre-fort chiffré intégré à GitHub. Les valeurs sont stockées chiffrées, jamais affichées en clair (même dans les logs), et accessibles depuis les workflows via <code>${{ secrets.NOM_DU_SECRET }}</code>.</p>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">1</div>
+    <div class="step-title">Créer un secret</div>
+  </div>
+  <ol>
+    <li>Sur votre dépôt → <strong>Settings</strong> → <strong>Secrets and variables</strong> → <strong>Actions</strong></li>
+    <li>Cliquez <strong>"New repository secret"</strong></li>
+    <li>Créez les secrets suivants :</li>
+  </ol>
+  <table>
+    <tr><th>Nom</th><th>Valeur (exemple pour l'exercice)</th></tr>
+    <tr><td><code>DATABASE_URL</code></td><td><code>postgresql://user:password@localhost/db</code></td></tr>
+    <tr><td><code>MON_SECRET</code></td><td><code>super-secret-123</code></td></tr>
+  </table>
+  <div class="alert alert-warning">
+    <div class="alert-icon">⚠️</div>
+    <div class="alert-content">Une fois créé, la valeur d'un secret ne peut plus être lue, même par vous. Vous pouvez seulement la remplacer ou la supprimer.</div>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">2</div>
+    <div class="step-title">Utiliser un secret dans un pipeline</div>
+  </div>
+  <p>Dans un fichier workflow, on accède aux secrets avec <code>${{ secrets.NOM }}</code> :</p>
+  <pre>
+- name: Déployer avec les credentials
+  run: ./deploy.sh
+  env:
+    DATABASE_URL: ${{ secrets.DATABASE_URL }}  <span class="comment"># Injecté comme variable d'environnement</span>
+</pre>
+  <p>GitHub remplace automatiquement <code>${{ secrets.DATABASE_URL }}</code> par la vraie valeur dans la machine virtuelle, et <strong>masque</strong> toute apparition de cette valeur dans les logs par <code>***</code>.</p>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">3</div>
+    <div class="step-title">Test pratique : voir le masquage en action</div>
+  </div>
+  <p>Ajoutez ce job temporaire à <code>.github/workflows/ci.yml</code> :</p>
+  <pre>
+test-secret:
+  name: Test du masquage des secrets
+  runs-on: ubuntu-latest
+  steps:
+    - name: Afficher le secret (masqué automatiquement)
+      run: echo "La valeur est : ${{ secrets.MON_SECRET }}"
+</pre>
+  <p>Poussez et observez les logs : vous verrez <code>La valeur est : ***</code>. La valeur n'est jamais exposée.</p>
+</div>
+
+<h2>Le secret GITHUB_TOKEN</h2>
+
+<p>Dans le fichier <code>cd.yml</code>, vous remarquerez :</p>
+<pre>password: ${{ secrets.GITHUB_TOKEN }}</pre>
+
+<p>Ce token est <strong>injecté automatiquement</strong> par GitHub dans chaque workflow. Il permet de s'authentifier aux services GitHub (Container Registry, API GitHub) depuis un pipeline, sans que vous ayez rien à configurer. Il est valable uniquement pendant l'exécution du workflow.</p>
+
+<!-- ═══════════════════════════════════════ ÉTAPE 7 ═══════════════════════════════════════ -->
+<h1 id="s10">10. Étape 7 — Protection des branches</h1>
+
+<p>Sans protection de branche, n'importe qui peut pousser du code directement sur <code>main</code>, sans que personne le relise, et sans que le CI tourne.</p>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">1</div>
+    <div class="step-title">Configurer la protection de main</div>
+  </div>
+  <ol>
+    <li>Sur votre dépôt → <strong>Settings</strong> → <strong>Branches</strong></li>
+    <li>Cliquez <strong>"Add branch protection rule"</strong></li>
+    <li>Dans "Branch name pattern", écrivez exactement : <code>main</code></li>
+    <li>Cochez ces options :</li>
+  </ol>
+  <table>
+    <tr>
+      <th>Option</th>
+      <th>Ce que ça fait</th>
+    </tr>
+    <tr>
+      <td>✅ Require a pull request before merging</td>
+      <td>Impossible de pousser directement sur main — une PR est obligatoire</td>
+    </tr>
+    <tr>
+      <td>✅ Require status checks to pass</td>
+      <td>Le CI doit réussir avant de pouvoir merger</td>
+    </tr>
+    <tr>
+      <td>✅ Require branches to be up to date</td>
+      <td>La branche doit être à jour avec main avant le merge</td>
+    </tr>
+    <tr>
+      <td>✅ Do not allow bypassing</td>
+      <td>Même les admins du dépôt respectent les règles</td>
+    </tr>
+  </table>
+  <ol start="5">
+    <li>Dans "Status checks", recherchez et ajoutez : <code>lint</code>, <code>test</code>, <code>security-audit</code></li>
+    <li>Cliquez <strong>"Save changes"</strong></li>
+  </ol>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">2</div>
+    <div class="step-title">Tester la protection</div>
+  </div>
+  <p>Essayez de pousser directement sur main :</p>
+  <pre>
+git checkout main
+echo "// test" >> app/src/app.js
+git add . && git commit -m "test push direct"
+git push origin main
+</pre>
+  <p>Vous obtenez :</p>
+  <pre>
+remote: error: GH006: Protected branch update failed for refs/heads/main.
+remote: error: Required status check "test" is expected.
+To https://github.com/youssef-esgi/cicd-exercice.git
+ ! [remote rejected] main -> main (protected branch hook declined)
+</pre>
+  <div class="alert alert-success">
+    <div class="alert-icon">✅</div>
+    <div class="alert-content">GitHub refuse le push. Vous êtes obligé de passer par une Pull Request dont tous les checks CI doivent être verts.</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ ÉTAPE 8 ═══════════════════════════════════════ -->
+<h1 id="s11">11. Étape 8 — Le pipeline CD et les environnements</h1>
+
+<h2>Comprendre les environnements</h2>
+
+<p>Un environnement en CI/CD est une "cible de déploiement" avec ses propres règles :</p>
+
+<div class="diagram">
+  DEV        STAGING        PRODUCTION
+  ────       ──────────     ────────────────
+  Local      Automatique    Approbation
+  (votre     après merge    manuelle
+   machine)  dans main      requise
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">1</div>
+    <div class="step-title">Créer les environnements</div>
+  </div>
+  <ol>
+    <li>Sur votre dépôt → <strong>Settings</strong> → <strong>Environments</strong></li>
+    <li>Cliquez <strong>"New environment"</strong> → nommez-le <strong><code>staging</code></strong> → cliquez "Configure environment"</li>
+    <li>Cliquez <strong>"New environment"</strong> → nommez-le <strong><code>production</code></strong> → cliquez "Configure environment"</li>
+    <li>Pour <code>production</code> : cochez <strong>"Required reviewers"</strong> et ajoutez votre propre nom</li>
+  </ol>
+  <p>Désormais, le déploiement en production est bloqué jusqu'à ce qu'un humain l'approuve manuellement.</p>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">2</div>
+    <div class="step-title">Autoriser les workflows à écrire dans le Container Registry</div>
+  </div>
+  <ol>
+    <li>Sur votre dépôt → <strong>Settings</strong> → <strong>Actions</strong> → <strong>General</strong></li>
+    <li>Sous "Workflow permissions", sélectionnez <strong>"Read and write permissions"</strong></li>
+    <li>Sauvegardez</li>
+  </ol>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">3</div>
+    <div class="step-title">Observer le pipeline CD</div>
+  </div>
+  <p>Mergez la Pull Request créée à l'étape 5 (ou créez-en une nouvelle). Dès que le merge est effectué sur main, le pipeline CD se déclenche :</p>
+  <ol>
+    <li><strong>publish</strong> : l'image Docker est construite et publiée sur <code>ghcr.io/votre-username/cicd-exercice</code></li>
+    <li><strong>deploy-staging</strong> : déploiement automatique en staging</li>
+    <li><strong>deploy-production</strong> : ⏸️ EN ATTENTE — vous recevez un email !</li>
+  </ol>
+  <p>Pour approuver le déploiement en production :</p>
+  <ol>
+    <li>Allez dans l'onglet Actions → cliquez sur le workflow CD en cours</li>
+    <li>Cliquez sur le job <strong>"deploy-production"</strong></li>
+    <li>Cliquez <strong>"Review deployments"</strong></li>
+    <li>Cochez "production" et cliquez <strong>"Approve and deploy"</strong></li>
+  </ol>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">4</div>
+    <div class="step-title">Voir l'image publiée</div>
+  </div>
+  <ol>
+    <li>Allez sur votre profil GitHub (pas le dépôt, votre profil)</li>
+    <li>Cliquez sur l'onglet <strong>"Packages"</strong></li>
+    <li>Vous voyez votre image <code>cicd-exercice</code> avec deux tags : <code>latest</code> et <code>sha-XXXXXXXX</code></li>
+  </ol>
+  <p>Depuis n'importe quelle machine, on peut maintenant télécharger cette image :</p>
+  <pre>docker pull ghcr.io/youssef-esgi/cicd-exercice:latest</pre>
+</div>
+
+<!-- ═══════════════════════════════════════ ÉTAPE 9 : TRIVY ═══════════════════════════════════════ -->
+<h1 id="s12">12. Étape 9 — Sécurité des images Docker avec Trivy</h1>
+
+<div class="alert alert-info">
+  <div class="alert-icon">🔍</div>
+  <div class="alert-content">
+    <div class="alert-title">C'est quoi Trivy ?</div>
+    <strong>Trivy</strong> (prononcé "try-vee") est un scanner de vulnérabilités open source créé par la société Aqua Security.
+    Il analyse une image Docker couche par couche pour trouver des failles de sécurité connues dans les logiciels installés.
+  </div>
+</div>
+
+<h2>Pourquoi scanner une image Docker ?</h2>
+
+<p>Quand vous créez une image Docker avec <code>FROM node:20-alpine</code>, vous héritez de tout ce qui est dans cette image :
+l'OS Alpine Linux, le runtime Node.js, des dizaines de bibliothèques système... Ces composants peuvent contenir des
+<strong>vulnérabilités connues</strong>, identifiées par des numéros CVE (Common Vulnerabilities and Exposures).</p>
+
+<div class="diagram">
+  Votre image Docker = couches empilées
+  ┌─────────────────────────────────────┐
+  │  Votre code (app.js, server.js)     │ ← Analysé par CodeQL (SAST)
+  ├─────────────────────────────────────┤
+  │  Vos dépendances npm (express...)   │ ← Analysé par npm audit ET Trivy
+  ├─────────────────────────────────────┤
+  │  Runtime Node.js 20                 │ ← Analysé par Trivy
+  ├─────────────────────────────────────┤
+  │  OS Alpine Linux (libc, openssl...) │ ← Analysé par Trivy
+  └─────────────────────────────────────┘
+</div>
+
+<h2>npm audit vs Trivy : quelle différence ?</h2>
+
+<table>
+  <tr>
+    <th>Outil</th>
+    <th>Ce qu'il analyse</th>
+    <th>Quand il tourne</th>
+  </tr>
+  <tr>
+    <td><strong>npm audit</strong></td>
+    <td>Les packages npm (express, jest, eslint...)</td>
+    <td>Job <code>security-audit</code></td>
+  </tr>
+  <tr>
+    <td><strong>Trivy</strong></td>
+    <td>L'image Docker entière : OS + runtime Node.js + packages npm de production</td>
+    <td>Job <code>build-docker</code></td>
+  </tr>
+</table>
+
+<div class="alert alert-warning">
+  <div class="alert-icon">⚠️</div>
+  <div class="alert-content">
+    <div class="alert-title">Un cas réel : Log4Shell (CVE-2021-44228)</div>
+    En 2021, une vulnérabilité critique dans Log4j (bibliothèque Java) a affecté des millions de serveurs.
+    Les équipes qui avaient Trivy dans leur pipeline ont pu détecter et corriger la faille en quelques heures.
+    Celles qui ne scannaient pas leurs images l'ont découvert... après l'attaque.
+  </div>
+</div>
+
+<h2>Comment Trivy est intégré dans notre pipeline</h2>
+
+<p>Dans le job <code>build-docker</code> de <code>ci.yml</code>, Trivy est lancé juste après la construction de l'image :</p>
+
+<pre>
+<span class="comment"># 1. Construire l'image Docker (disponible localement sur l'Ubuntu runner)</span>
+- name: Construire l'image Docker
+  run: docker build -t cicd-exercice:${{ github.sha }} app/
+
+<span class="comment"># 2. Scanner l'image avec Trivy</span>
+- name: Scanner l'image Docker pour les vulnérabilités (Trivy)
+  uses: aquasecurity/trivy-action@0.20.0   <span class="comment"># Version fixe (bonne pratique sécurité)</span>
+  with:
+    image-ref: cicd-exercice:${{ github.sha }}  <span class="comment"># L'image qu'on vient de construire</span>
+    format: 'table'                              <span class="comment"># Affichage en tableau dans les logs</span>
+    exit-code: '1'                               <span class="comment"># Exit code 1 = pipeline échoue si vulnérable</span>
+    ignore-unfixed: true                         <span class="comment"># Ignorer les CVE sans correctif disponible</span>
+    vuln-type: 'os,library'                      <span class="comment"># Analyser l'OS et les bibliothèques</span>
+    severity: 'CRITICAL,HIGH'                    <span class="comment"># Seulement les failles graves</span>
+</pre>
+
+<h2>Comprendre les niveaux de sévérité CVE</h2>
+
+<table>
+  <tr>
+    <th>Niveau</th>
+    <th>Score CVSS</th>
+    <th>Description</th>
+    <th>Notre pipeline</th>
+  </tr>
+  <tr>
+    <td><span class="badge-fail">CRITICAL</span></td>
+    <td>9.0 – 10.0</td>
+    <td>Exploitation facile, impact maximal (ex : exécution de code à distance)</td>
+    <td>❌ Pipeline bloqué</td>
+  </tr>
+  <tr>
+    <td><span class="badge-fail">HIGH</span></td>
+    <td>7.0 – 8.9</td>
+    <td>Impact important (ex : vol de données, élévation de privilèges)</td>
+    <td>❌ Pipeline bloqué</td>
+  </tr>
+  <tr>
+    <td><span class="badge-warn">MEDIUM</span></td>
+    <td>4.0 – 6.9</td>
+    <td>Impact modéré, conditions d'exploitation particulières</td>
+    <td>⚠️ Affiché mais ignoré</td>
+  </tr>
+  <tr>
+    <td>LOW</td>
+    <td>0.1 – 3.9</td>
+    <td>Impact faible</td>
+    <td>⚠️ Affiché mais ignoré</td>
+  </tr>
+</table>
+
+<h2>Exemple de rapport Trivy dans les logs</h2>
+
+<p>Voici à quoi ressemble un rapport Trivy sans vulnérabilités critiques (ce que vous devriez voir) :</p>
+
+<pre>
+2024-03-27T08:12:45Z INFO Vulnerability scanning is enabled
+2024-03-27T08:12:52Z INFO Detected OS family="alpine" version="3.19.1"
+
+cicd-exercice:abc1234 (alpine 3.19.1)
+====================================
+Total: 0 (HIGH: 0, CRITICAL: 0)
+</pre>
+
+<p>Et un exemple avec une vulnérabilité HIGH détectée (pipeline qui échoue) :</p>
+
+<pre>
+cicd-exercice:abc1234 (alpine 3.19.1)
+====================================
+Total: 1 (HIGH: 1, CRITICAL: 0)
+
+┌─────────┬────────────────┬──────────┬──────────────────┬─────────────────┐
+│ Library │ Vulnerability  │ Severity │ Installed Version│ Fixed Version   │
+├─────────┼────────────────┼──────────┼──────────────────┼─────────────────┤
+│ openssl │ CVE-2024-XXXX  │ HIGH     │ 3.1.4-r5         │ 3.1.5-r0        │
+└─────────┴────────────────┴──────────┴──────────────────┴─────────────────┘
+</pre>
+
+<p><strong>Comment corriger ?</strong> Mettre à jour l'image de base dans le Dockerfile :</p>
+<pre>
+<span class="comment"># FROM node:20-alpine   ← ancienne image</span>
+FROM node:20-alpine    <span class="comment">← GitHub Dependabot peut proposer des mises à jour automatiquement</span>
+</pre>
+
+<h2>Pourquoi Trivy scanne aussi les packages npm ?</h2>
+
+<p>Dans notre Dockerfile, on utilise <code>npm ci --only=production</code>, ce qui installe seulement <strong>express</strong> (pas jest, eslint, etc.).</p>
+
+<p>Trivy va donc scanner uniquement les dépendances de production dans l'image. Comparé à <code>npm audit</code> qui scanne aussi les devDependencies (jest, eslint...), Trivy nous donne une vue plus précise de la sécurité de ce qui tourne réellement en production.</p>
+
+<div class="alert alert-info">
+  <div class="alert-icon">💡</div>
+  <div class="alert-content">
+    <div class="alert-title">Le résultat de npm audit de notre projet</div>
+    Si vous avez lancé <code>npm audit</code> en local, vous avez peut-être vu 26 vulnérabilités "moderate".
+    Ce sont des vulnérabilités dans jest et eslint (devDependencies). Notre pipeline utilise
+    <code>--audit-level=high</code>, donc le pipeline <strong>ne bloque pas</strong> sur les "moderate".<br><br>
+    Et comme ces outils ne sont jamais dans l'image Docker finale (grâce à <code>--only=production</code>),
+    Trivy ne les verra pas non plus. <strong>Zéro vulnérabilité CRITICAL ou HIGH en production.</strong>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">1</div>
+    <div class="step-title">Observer le scan Trivy dans les logs GitHub Actions</div>
+  </div>
+  <ol>
+    <li>Allez dans l'onglet <strong>Actions</strong> de votre dépôt</li>
+    <li>Cliquez sur le dernier run du workflow "CI - Intégration Continue"</li>
+    <li>Cliquez sur le job <strong>"Construction image Docker"</strong></li>
+    <li>Développez l'étape <strong>"Scanner l'image Docker pour les vulnérabilités (Trivy)"</strong></li>
+    <li>Vous devriez voir : <code>Total: 0 (HIGH: 0, CRITICAL: 0)</code></li>
+  </ol>
+  <div class="alert alert-success">
+    <div class="alert-icon">✅</div>
+    <div class="alert-content">Notre image basée sur <code>node:20-alpine</code> est régulièrement maintenue par l'équipe Node.js officielle. Elle ne contient pas de vulnérabilités HIGH ou CRITICAL connues.</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ ÉTAPE 10 : CODEQL ═══════════════════════════════════════ -->
+<h1 id="s12b">13. Étape 10 — Analyse du code source avec CodeQL (SAST)</h1>
+
+<h2>Qu'est-ce que le SAST ?</h2>
+
+<p>SAST signifie <strong>Static Application Security Testing</strong> : analyser le code source <strong>sans l'exécuter</strong> pour détecter des vulnérabilités.</p>
+
+<p><strong>CodeQL</strong> est l'outil SAST de GitHub. Il comprend la sémantique du code (pas juste des expressions régulières) et peut détecter des failles complexes.</p>
+
+<table>
+  <tr>
+    <th>Vulnérabilité détectée par CodeQL</th>
+    <th>Description</th>
+  </tr>
+  <tr>
+    <td>Path Traversal</td>
+    <td>Accéder à des fichiers hors du dossier prévu via <code>../../</code></td>
+  </tr>
+  <tr>
+    <td>SQL Injection</td>
+    <td>Données utilisateur insérées directement dans une requête SQL</td>
+  </tr>
+  <tr>
+    <td>XSS (Cross-Site Scripting)</td>
+    <td>Données utilisateur insérées dans du HTML sans nettoyage</td>
+  </tr>
+  <tr>
+    <td>Command Injection</td>
+    <td>Données utilisateur passées à une commande shell</td>
+  </tr>
+  <tr>
+    <td>Mauvaise gestion des secrets</td>
+    <td>Credentials codés en dur dans le code</td>
+  </tr>
+</table>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">1</div>
+    <div class="step-title">Activer l'analyse CodeQL</div>
+  </div>
+  <ol>
+    <li>Sur votre dépôt → <strong>Settings</strong> → <strong>Code security and analysis</strong></li>
+    <li>Activez <strong>"Code scanning"</strong> (cliquez sur "Set up" → "Default")</li>
+    <li>Le fichier <code>security-scan.yml</code> que vous avez déjà dans <code>.github/workflows/</code> tournera automatiquement</li>
+  </ol>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">2</div>
+    <div class="step-title">Simuler une vulnérabilité (exercice démonstration)</div>
+  </div>
+  <div class="alert alert-warning">
+    <div class="alert-icon">⚠️</div>
+    <div class="alert-content">Ceci est un exercice pédagogique. Ne jamais mettre ce type de code en production.</div>
+  </div>
+  <p>Créez une branche et ajoutez cette route vulnérable à <code>app.js</code> :</p>
+  <pre>
+const fs = require('fs');
+const path = require('path');
+
+<span class="comment">// VULNÉRABILITÉ INTENTIONNELLE : Path Traversal</span>
+app.get('/read-file', (req, res) => {
+  <span class="comment">// DANGER : l'utilisateur contrôle le chemin du fichier !</span>
+  const filePath = path.join(__dirname, req.query.filename);
+  const content = fs.readFileSync(filePath, 'utf8');
+  res.send(content);
+});
+</pre>
+  <p>Un attaquant pourrait appeler :<br>
+  <code>GET /read-file?filename=../../../../etc/passwd</code><br>
+  Et lire le fichier des utilisateurs du système !</p>
+  <p>Poussez ce code et attendez l'analyse CodeQL (peut prendre quelques minutes). Une alerte apparaîtra dans <strong>Onglet Security → Code scanning alerts</strong>.</p>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">3</div>
+    <div class="step-title">Corriger la vulnérabilité</div>
+  </div>
+  <p>Voici la version corrigée :</p>
+  <pre>
+app.get('/read-file', (req, res) => {
+  const allowedDir = path.join(__dirname, 'public-files');
+  const filePath = path.join(allowedDir, req.query.filename);
+
+  <span class="comment">// Vérification : le chemin résolu doit rester dans le dossier autorisé</span>
+  if (!filePath.startsWith(allowedDir)) {
+    return res.status(403).json({ error: 'Accès refusé' });
+  }
+
+  const content = fs.readFileSync(filePath, 'utf8');
+  res.send(content);
+});
+</pre>
+  <p>Maintenant, même si l'utilisateur essaie <code>../../etc/passwd</code>, le chemin résolu sort du dossier autorisé et la requête est rejetée avec une erreur 403.</p>
+</div>
+
+<!-- ═══════════════════════════════════════ ÉTAPE 11 ═══════════════════════════════════════ -->
+<h1 id="s13">14. Étape 11 — Scénario complet : la Pull Request</h1>
+
+<p>On va simuler un workflow d'équipe réel, de la feature branch jusqu'au déploiement en production.</p>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">1</div>
+    <div class="step-title">Créer la feature branch</div>
+  </div>
+  <pre>git checkout -b feature/division</pre>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">2</div>
+    <div class="step-title">Ajouter la route /divide dans app.js</div>
+  </div>
+  <p>Dans <code>app/src/app.js</code>, ajoutez avant <code>module.exports = app;</code> :</p>
+  <pre>
+app.post('/divide', (req, res) => {
+  const { a, b } = req.body;
+  if (typeof a !== 'number' || typeof b !== 'number') {
+    return res.status(400).json({ error: 'Les paramètres a et b doivent être des nombres' });
+  }
+  if (b === 0) {
+    return res.status(400).json({ error: 'Division par zéro impossible' });
+  }
+  res.json({ result: a / b });
+});
+</pre>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">3</div>
+    <div class="step-title">Ajouter les tests dans app.test.js</div>
+  </div>
+  <p>Dans <code>app/tests/app.test.js</code>, ajoutez :</p>
+  <pre>
+describe('POST /divide', () => {
+  test('divise deux nombres', async () => {
+    const res = await request(app).post('/divide').send({ a: 10, b: 2 });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.result).toBe(5);
+  });
+
+  test('retourne une erreur pour une division par zéro', async () => {
+    const res = await request(app).post('/divide').send({ a: 10, b: 0 });
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toBe('Division par zéro impossible');
+  });
+});
+</pre>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">4</div>
+    <div class="step-title">Pousser et créer la Pull Request</div>
+  </div>
+  <pre>
+git add .
+git commit -m "feat: ajout de la route /divide avec gestion division par zéro"
+git push origin feature/division
+</pre>
+  <p>Sur GitHub, une bannière jaune apparaît en haut du dépôt :<br>
+  <em>"feature/division had recent pushes less than a minute ago. Compare &amp; pull request"</em></p>
+  <p>Cliquez sur <strong>"Compare &amp; pull request"</strong>.</p>
+  <p>Remplissez la PR :</p>
+  <ul>
+    <li><strong>Title</strong> : <code>feat: ajout de la division</code></li>
+    <li><strong>Description</strong> :
+      <pre>
+## Ce que j'ai fait
+- Ajout de la route POST /divide
+- Gestion de la division par zéro (retourne 400)
+- Tests unitaires associés
+
+## Comment tester
+curl -X POST http://localhost:3000/divide \
+  -H "Content-Type: application/json" \
+  -d '{"a":10,"b":2}'
+# Réponse attendue : {"result":5}
+</pre>
+    </li>
+  </ul>
+  <p>Cliquez <strong>"Create pull request"</strong>.</p>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">5</div>
+    <div class="step-title">Observer le CI sur la PR</div>
+  </div>
+  <p>Sur la page de la PR, vous voyez les checks CI en temps réel :</p>
+  <pre>
+Some checks haven't completed yet
+  ● lint — in progress...
+
+All checks have passed
+  ✅ lint — passed
+  ✅ test — passed
+  ✅ security-audit — passed
+  ✅ build-docker — passed
+</pre>
+  <p>Le bouton <strong>"Merge pull request"</strong> ne devient cliquable que quand tous les checks sont verts.</p>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">6</div>
+    <div class="step-title">Merger et suivre le CD</div>
+  </div>
+  <ol>
+    <li>Cliquez <strong>"Merge pull request"</strong> → <strong>"Confirm merge"</strong></li>
+    <li>Allez dans l'onglet <strong>Actions</strong> → vous voyez le pipeline CD se lancer automatiquement</li>
+    <li>L'image Docker avec la nouvelle route <code>/divide</code> est publiée automatiquement</li>
+    <li>Approuvez le déploiement en production quand GitHub vous le demande</li>
+  </ol>
+  <div class="alert alert-success">
+    <div class="alert-icon">🎉</div>
+    <div class="alert-content">
+      <div class="alert-title">Félicitations !</div>
+      Vous venez de réaliser un cycle CI/CD complet : feature branch → PR → CI → merge → CD → production.
+      C'est exactement le workflow utilisé dans les équipes professionnelles.
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ SECTION 14 ═══════════════════════════════════════ -->
+<h1 id="s14">15. Récapitulatif : les 7 règles d'or de la sécurité CI/CD</h1>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">1</div>
+    <div class="step-title">Épingler les versions des actions tierces</div>
+  </div>
+  <pre>
+<span class="comment"># ❌ Dangereux : si quelqu'un compromet le dépôt de l'action, votre pipeline est compromis</span>
+- uses: actions/checkout@main
+
+<span class="comment"># ✅ Sécurisé : hash de commit immuable (impossible à falsifier)</span>
+- uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  <span class="comment"># v4.2.2</span>
+</pre>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">2</div>
+    <div class="step-title">Principe du moindre privilège</div>
+  </div>
+  <pre>
+<span class="comment"># Donner seulement les permissions nécessaires au pipeline</span>
+permissions:
+  contents: read       <span class="comment"># Peut lire le code</span>
+  packages: write      <span class="comment"># Peut publier des images Docker</span>
+  <span class="comment"># Pas de permissions d'écriture sur le code, pas d'accès aux secrets d'autres repos</span>
+</pre>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">3</div>
+    <div class="step-title">Jamais de secrets dans le code</div>
+  </div>
+  <pre>
+<span class="comment"># ❌ CATASTROPHIQUE</span>
+DATABASE_URL = "postgresql://admin:motdepasse123@prod-server/db"  <span class="comment"># Dans le code source !</span>
+
+<span class="comment"># ✅ CORRECT</span>
+DATABASE_URL: ${{ secrets.DATABASE_URL }}  <span class="comment"># Via GitHub Secrets</span>
+</pre>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">4</div>
+    <div class="step-title">Revue de code obligatoire (Pull Requests)</div>
+  </div>
+  <p>La protection de branche + les PR obligatoires garantissent que chaque modification est relue par un autre humain avant d'aller en production.</p>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">5</div>
+    <div class="step-title">Scanner les dépendances régulièrement</div>
+  </div>
+  <p>Les bibliothèques open source sont une surface d'attaque majeure. Une dépendance peut être vulnérable des mois après sa publication.</p>
+  <ul>
+    <li><code>npm audit</code> : vérifie les CVE connues</li>
+    <li>Dependabot : crée automatiquement des PRs pour mettre à jour les dépendances</li>
+    <li>Trivy : scanner les images Docker</li>
+  </ul>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">6</div>
+    <div class="step-title">Environnements séparés + approbation manuelle pour la prod</div>
+  </div>
+  <div class="diagram">
+  feature branch ──▶ staging (automatique) ──▶ production (approbation humaine requise)
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-header">
+    <div class="step-number">7</div>
+    <div class="step-title">Ne pas tourner en root dans les containers</div>
+  </div>
+  <p>Si l'application est compromise, un utilisateur non-root limite considérablement ce que l'attaquant peut faire dans le container.</p>
+</div>
+
+<!-- ═══════════════════════════════════════ SECTION 15 ═══════════════════════════════════════ -->
+<h1 id="s15">16. Exercices bonus</h1>
+
+<h2>Bonus 1 — Ajouter Dependabot (mise à jour automatique des dépendances)</h2>
+
+<p>Créez le fichier <code>.github/dependabot.yml</code> :</p>
+<pre>
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/app"
+    schedule:
+      interval: "weekly"    <span class="comment"># Vérifie chaque semaine les mises à jour</span>
+</pre>
+<p>Dependabot va créer automatiquement des Pull Requests pour mettre à jour vos dépendances quand de nouvelles versions sortent.</p>
+
+<h2>Bonus 2 — Matrice de tests (plusieurs versions de Node)</h2>
+
+<p>Modifiez le job <code>test</code> dans <code>ci.yml</code> :</p>
+<pre>
+test:
+  strategy:
+    matrix:
+      node-version: [18, 20, 22]  <span class="comment"># 3 jobs lancés en parallèle</span>
+  name: Tests (Node ${{ matrix.node-version }})
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+</pre>
+
+<h2>Bonus 3 — Notification Slack en cas de déploiement réussi</h2>
+
+<ol>
+  <li>Créez un webhook entrant dans votre espace Slack</li>
+  <li>Ajoutez-le comme secret : <code>SLACK_WEBHOOK_URL</code></li>
+  <li>Ajoutez cette étape à la fin du job <code>deploy-production</code> :</li>
+</ol>
+<pre>
+- name: Notifier Slack
+  if: success()
+  run: |
+    curl -X POST -H 'Content-type: application/json' \
+      --data "{\"text\":\"Déploiement réussi en production ! Commit: ${{ github.sha }}\"}" \
+      ${{ secrets.SLACK_WEBHOOK_URL }}
+</pre>
+
+<h2>Bonus 4 — Badge de statut dans le README</h2>
+
+<p>Ajoutez ce badge dans votre <code>README.md</code> pour afficher le statut du CI :</p>
+<pre>
+![CI](https://github.com/youssef-esgi/cicd-exercice/actions/workflows/ci.yml/badge.svg)
+</pre>
+<p>Il affichera un badge vert "passing" ou rouge "failing" selon le dernier run du pipeline.</p>
+
+<hr class="section-divider">
+
+<div class="alert alert-success">
+  <div class="alert-icon">🏆</div>
+  <div class="alert-content">
+    <div class="alert-title">Vous avez terminé l'exercice !</div>
+    Vous savez maintenant mettre en place un pipeline CI/CD complet et sécurisé avec GitHub Actions.
+    Ces compétences sont directement applicables dans un contexte professionnel DevSecOps.
+    <br><br>
+    <strong>Ce que vous maîtrisez maintenant :</strong>
+    <ul>
+      <li>Créer et lire un fichier workflow GitHub Actions</li>
+      <li>Configurer du lint, des tests et un audit de sécurité automatiques</li>
+      <li>Construire et publier une image Docker sécurisée</li>
+      <li>Gérer les secrets sans jamais les exposer</li>
+      <li>Protéger les branches et imposer les PR</li>
+      <li>Mettre en place des environnements avec approbation manuelle</li>
+      <li>Analyser la sécurité du code avec CodeQL</li>
+    </ul>
+  </div>
+</div>
+
+</body>
+</html>

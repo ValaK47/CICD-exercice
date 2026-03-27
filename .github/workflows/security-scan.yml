@@ -1,0 +1,41 @@
+name: Analyse de Sécurité Avancée (CodeQL)
+
+# S'exécute chaque semaine ET à chaque push sur main
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    # Tous les lundis à 8h00 UTC (analyse programmée)
+    - cron: '0 8 * * 1'
+
+permissions:
+  contents: read
+  security-events: write  # Nécessaire pour publier les résultats dans l'onglet Security
+
+jobs:
+  codeql:
+    name: Analyse CodeQL (SAST)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Récupérer le code source
+        uses: actions/checkout@v4
+
+      - name: Initialiser CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+          # CodeQL va analyser le code à la recherche de :
+          # - Injections SQL
+          # - XSS (Cross-Site Scripting)
+          # - Path traversal
+          # - Mauvaise gestion des secrets
+          # - Et bien d'autres...
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Lancer l'analyse CodeQL
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript"

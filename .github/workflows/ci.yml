@@ -1,0 +1,117 @@
+name: CI - Intégration Continue
+
+# Déclencheurs : ce pipeline s'exécute sur chaque push et Pull Request
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  # ─────────────────────────────────────────────
+  # JOB 1 : Analyse statique du code (Linting)
+  # ─────────────────────────────────────────────
+  lint:
+    name: Analyse du code (ESLint)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Récupérer le code source
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Installer les dépendances
+        run: npm install
+        working-directory: app
+
+      - name: Lancer ESLint
+        run: npm run lint
+        working-directory: app
+
+  # ─────────────────────────────────────────────
+  # JOB 2 : Tests unitaires
+  # ─────────────────────────────────────────────
+  test:
+    name: Tests unitaires (Jest)
+    runs-on: ubuntu-latest
+    needs: lint  # Ce job attend que le lint soit OK
+
+    steps:
+      - name: Récupérer le code source
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Installer les dépendances
+        run: npm install
+        working-directory: app
+
+      - name: Lancer les tests avec couverture de code
+        run: npm test
+        working-directory: app
+
+      - name: Publier le rapport de couverture
+        uses: actions/upload-artifact@v4
+        if: always()  # Publier même en cas d'échec
+        with:
+          name: coverage-report
+          path: app/coverage/
+
+  # ─────────────────────────────────────────────
+  # JOB 3 : Audit de sécurité des dépendances
+  # ─────────────────────────────────────────────
+  security-audit:
+    name: Audit de sécurité (npm audit)
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - name: Récupérer le code source
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Installer les dépendances
+        run: npm install
+        working-directory: app
+
+      - name: Vérifier les vulnérabilités connues
+        # --audit-level=critical : échoue seulement pour les vulnérabilités CRITICAL
+        run: npm audit --audit-level=critical
+        working-directory: app
+
+  # ─────────────────────────────────────────────
+  # JOB 4 : Construction de l'image Docker
+  # ─────────────────────────────────────────────
+  build-docker:
+    name: Construction image Docker
+    runs-on: ubuntu-latest
+    needs: [test, security-audit]  # Attend que les tests ET l'audit passent
+
+    steps:
+      - name: Récupérer le code source
+        uses: actions/checkout@v4
+
+      - name: Construire l'image Docker
+        # On utilise docker build directement (plus simple que buildx pour un scan local)
+        run: docker build -t cicd-exercice:${{ github.sha }} app/
+
+      - name: Scanner l'image Docker pour les vulnérabilités (Trivy)
+        uses: aquasecurity/trivy-action@0.20.0
+        with:
+          image-ref: cicd-exercice:${{ github.sha }}
+          format: 'table'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
